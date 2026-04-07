@@ -1,7 +1,9 @@
 use std::ffi::OsString;
 use std::sync::{Mutex, OnceLock};
 
-use api::{read_xai_base_url, ApiError, AuthSource, ProviderClient, ProviderKind};
+use api::{
+    read_gemini_base_url, read_xai_base_url, ApiError, AuthSource, ProviderClient, ProviderKind,
+};
 
 #[test]
 fn provider_client_routes_grok_aliases_through_xai() {
@@ -31,6 +33,33 @@ fn provider_client_reports_missing_xai_credentials_for_grok_models() {
 }
 
 #[test]
+fn provider_client_routes_gemini_aliases_through_gemini_provider() {
+    let _lock = env_lock();
+    let _gemini_api_key = EnvVarGuard::set("GEMINI_API_KEY", Some("gemini-test-key"));
+
+    let client = ProviderClient::from_model("gemini").expect("gemini alias should resolve");
+
+    assert_eq!(client.provider_kind(), ProviderKind::Gemini);
+}
+
+#[test]
+fn provider_client_reports_missing_gemini_credentials_for_gemini_models() {
+    let _lock = env_lock();
+    let _gemini_api_key = EnvVarGuard::set("GEMINI_API_KEY", None);
+
+    let error = ProviderClient::from_model("gemini-3.1")
+        .expect_err("gemini requests without GEMINI_API_KEY should fail fast");
+
+    match error {
+        ApiError::MissingCredentials { provider, env_vars } => {
+            assert_eq!(provider, "Gemini");
+            assert_eq!(env_vars, &["GEMINI_API_KEY"]);
+        }
+        other => panic!("expected missing Gemini credentials, got {other:?}"),
+    }
+}
+
+#[test]
 fn provider_client_uses_explicit_anthropic_auth_without_env_lookup() {
     let _lock = env_lock();
     let _anthropic_api_key = EnvVarGuard::set("ANTHROPIC_API_KEY", None);
@@ -51,6 +80,17 @@ fn read_xai_base_url_prefers_env_override() {
     let _xai_base_url = EnvVarGuard::set("XAI_BASE_URL", Some("https://example.xai.test/v1"));
 
     assert_eq!(read_xai_base_url(), "https://example.xai.test/v1");
+}
+
+#[test]
+fn read_gemini_base_url_prefers_env_override() {
+    let _lock = env_lock();
+    let _gemini_base_url = EnvVarGuard::set(
+        "GEMINI_BASE_URL",
+        Some("https://example.gemini.test/openai"),
+    );
+
+    assert_eq!(read_gemini_base_url(), "https://example.gemini.test/openai");
 }
 
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
