@@ -20,7 +20,8 @@ cargo build --workspace
 
 - Rust toolchain with `cargo`
 - One of:
-  - `ANTHROPIC_API_KEY` for direct API access
+  - `GEMINI_API_KEY` for Gemini API access
+  - `ANTHROPIC_API_KEY` for Anthropic API access
   - `claw login` for OAuth-based auth
 - Optional: `ANTHROPIC_BASE_URL` when targeting a proxy or local service
 
@@ -92,13 +93,30 @@ Model aliases currently supported by the CLI:
 - `opus` → `claude-opus-4-6`
 - `sonnet` → `claude-sonnet-4-6`
 - `haiku` → `claude-haiku-4-5-20251213`
+- `gemini` → `gemini-3`
+- `gemini-pro` → `gemini-3.1`
 
 ## Authentication
 
 ### API key
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="..."
+```
+
+### Provider selection override
+
+You can explicitly force the provider selection logic:
+
+```bash
+export AI_PROVIDER="anthropic"  # anthropic | gemini | openai | xai
+```
+
+For local Ollama routing, set:
+
+```bash
+export AI_PROVIDER="local"      # routes through OpenAI-compatible transport
+export OLLAMA_BASE_URL="http://localhost:11434/v1"
 ```
 
 ### OAuth
@@ -138,6 +156,7 @@ cd rust
 ```bash
 export OPENAI_BASE_URL="http://127.0.0.1:11434/v1"
 unset OPENAI_API_KEY
+export AI_PROVIDER="local"
 
 cd rust
 ./target/debug/claw --model "llama3.2" prompt "summarize this repository in one sentence"
@@ -155,12 +174,13 @@ cd rust
 
 ## Supported Providers & Models
 
-`claw` has three built-in provider backends. The provider is selected automatically based on the model name, falling back to whichever credential is present in the environment.
+`claw` has four built-in provider backends. The provider is selected automatically based on the model name, falling back to whichever credential is present in the environment.
 
 ### Provider matrix
 
 | Provider | Protocol | Auth env var(s) | Base URL env var | Default base URL |
 |---|---|---|---|---|
+| **Gemini** | Google Gemini OpenAI-compatible endpoint | `GEMINI_API_KEY` | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | **Anthropic** (direct) | Anthropic Messages API | `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` or OAuth (`claw login`) | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` |
 | **xAI** | OpenAI-compatible | `XAI_API_KEY` | `XAI_BASE_URL` | `https://api.x.ai/v1` |
 | **OpenAI-compatible** | OpenAI Chat Completions | `OPENAI_API_KEY` | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
@@ -176,6 +196,8 @@ These are the models registered in the built-in alias table with known token lim
 | `opus` | `claude-opus-4-6` | Anthropic | 32 000 | 200 000 |
 | `sonnet` | `claude-sonnet-4-6` | Anthropic | 64 000 | 200 000 |
 | `haiku` | `claude-haiku-4-5-20251213` | Anthropic | 64 000 | 200 000 |
+| `gemini` / `gemini-flash` | `gemini-3` | Gemini | 64 000 | 1 048 576 |
+| `gemini-pro` | `gemini-3.1` | Gemini | 64 000 | 1 048 576 |
 | `grok` / `grok-3` | `grok-3` | xAI | 64 000 | 131 072 |
 | `grok-mini` / `grok-3-mini` | `grok-3-mini` | xAI | 64 000 | 131 072 |
 | `grok-2` | `grok-2` | xAI | — | — |
@@ -202,8 +224,9 @@ Local project settings override user-level settings. Aliases resolve through the
 
 1. If the resolved model name starts with `claude` → Anthropic.
 2. If it starts with `grok` → xAI.
-3. Otherwise, `claw` checks which credential is set: `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` first, then `OPENAI_API_KEY`, then `XAI_API_KEY`.
-4. If nothing matches, it defaults to Anthropic.
+3. If it starts with `gemini` → Gemini.
+4. Otherwise, `claw` checks which credential is set: `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` first, then `OPENAI_API_KEY`, then `XAI_API_KEY`, then `GEMINI_API_KEY`.
+5. If nothing matches, it defaults to Anthropic.
 
 ## FAQ
 
