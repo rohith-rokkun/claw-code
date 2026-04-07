@@ -11,6 +11,7 @@ pub enum ProviderClient {
     Anthropic(AnthropicClient),
     Xai(OpenAiCompatClient),
     OpenAi(OpenAiCompatClient),
+    Gemini(OpenAiCompatClient),
 }
 
 impl ProviderClient {
@@ -22,6 +23,23 @@ impl ProviderClient {
         model: &str,
         anthropic_auth: Option<AuthSource>,
     ) -> Result<Self, ApiError> {
+        if std::env::var("AI_PROVIDER")
+            .ok()
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("local"))
+        {
+            let base_url = std::env::var("OLLAMA_BASE_URL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "http://localhost:11434/v1".to_string());
+            let api_key = std::env::var("OPENAI_API_KEY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "ollama".to_string());
+            let client = OpenAiCompatClient::new(api_key, OpenAiCompatConfig::openai())
+                .with_base_url(base_url);
+            return Ok(Self::OpenAi(client));
+        }
+
         let resolved_model = providers::resolve_model_alias(model);
         match providers::detect_provider_kind(&resolved_model) {
             ProviderKind::Anthropic => Ok(Self::Anthropic(match anthropic_auth {
@@ -34,6 +52,9 @@ impl ProviderClient {
             ProviderKind::OpenAi => Ok(Self::OpenAi(OpenAiCompatClient::from_env(
                 OpenAiCompatConfig::openai(),
             )?)),
+            ProviderKind::Gemini => Ok(Self::Gemini(OpenAiCompatClient::from_env(
+                OpenAiCompatConfig::gemini(),
+            )?)),
         }
     }
 
@@ -43,6 +64,7 @@ impl ProviderClient {
             Self::Anthropic(_) => ProviderKind::Anthropic,
             Self::Xai(_) => ProviderKind::Xai,
             Self::OpenAi(_) => ProviderKind::OpenAi,
+            Self::Gemini(_) => ProviderKind::Gemini,
         }
     }
 
@@ -58,7 +80,7 @@ impl ProviderClient {
     pub fn prompt_cache_stats(&self) -> Option<PromptCacheStats> {
         match self {
             Self::Anthropic(client) => client.prompt_cache_stats(),
-            Self::Xai(_) | Self::OpenAi(_) => None,
+            Self::Xai(_) | Self::OpenAi(_) | Self::Gemini(_) => None,
         }
     }
 
@@ -66,7 +88,7 @@ impl ProviderClient {
     pub fn take_last_prompt_cache_record(&self) -> Option<PromptCacheRecord> {
         match self {
             Self::Anthropic(client) => client.take_last_prompt_cache_record(),
-            Self::Xai(_) | Self::OpenAi(_) => None,
+            Self::Xai(_) | Self::OpenAi(_) | Self::Gemini(_) => None,
         }
     }
 
@@ -76,7 +98,9 @@ impl ProviderClient {
     ) -> Result<MessageResponse, ApiError> {
         match self {
             Self::Anthropic(client) => client.send_message(request).await,
-            Self::Xai(client) | Self::OpenAi(client) => client.send_message(request).await,
+            Self::Xai(client) | Self::OpenAi(client) | Self::Gemini(client) => {
+                client.send_message(request).await
+            }
         }
     }
 
@@ -89,7 +113,7 @@ impl ProviderClient {
                 .stream_message(request)
                 .await
                 .map(MessageStream::Anthropic),
-            Self::Xai(client) | Self::OpenAi(client) => client
+            Self::Xai(client) | Self::OpenAi(client) | Self::Gemini(client) => client
                 .stream_message(request)
                 .await
                 .map(MessageStream::OpenAiCompat),
@@ -133,6 +157,11 @@ pub fn read_xai_base_url() -> String {
     openai_compat::read_base_url(OpenAiCompatConfig::xai())
 }
 
+#[must_use]
+pub fn read_gemini_base_url() -> String {
+    openai_compat::read_base_url(OpenAiCompatConfig::gemini())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::providers::{detect_provider_kind, resolve_model_alias, ProviderKind};
@@ -142,11 +171,13 @@ mod tests {
         assert_eq!(resolve_model_alias("opus"), "claude-opus-4-6");
         assert_eq!(resolve_model_alias("grok"), "grok-3");
         assert_eq!(resolve_model_alias("grok-mini"), "grok-3-mini");
+        assert_eq!(resolve_model_alias("gemini"), "gemini-3");
     }
 
     #[test]
     fn provider_detection_prefers_model_family() {
         assert_eq!(detect_provider_kind("grok-3"), ProviderKind::Xai);
+        assert_eq!(detect_provider_kind("gemini-3.1"), ProviderKind::Gemini);
         assert_eq!(
             detect_provider_kind("claude-sonnet-4-6"),
             ProviderKind::Anthropic
