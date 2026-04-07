@@ -55,7 +55,8 @@ cargo build --workspace
 Authenticate with either an API key or the built-in OAuth flow:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="..."
+export AI_PROVIDER="gemini" # optional override: anthropic | gemini | openai | xai
 # or
 cd rust
 ./target/debug/claw login
