@@ -112,6 +112,13 @@ You can explicitly force the provider selection logic:
 export AI_PROVIDER="anthropic"  # anthropic | gemini | openai | xai
 ```
 
+For local Ollama routing, set:
+
+```bash
+export AI_PROVIDER="local"      # routes through OpenAI-compatible transport
+export OLLAMA_BASE_URL="http://localhost:11434/v1"
+```
+
 ### OAuth
 
 ```bash
@@ -149,6 +156,7 @@ cd rust
 ```bash
 export OPENAI_BASE_URL="http://127.0.0.1:11434/v1"
 unset OPENAI_API_KEY
+export AI_PROVIDER="local"
 
 cd rust
 ./target/debug/claw --model "llama3.2" prompt "summarize this repository in one sentence"

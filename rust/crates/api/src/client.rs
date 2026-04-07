@@ -23,6 +23,23 @@ impl ProviderClient {
         model: &str,
         anthropic_auth: Option<AuthSource>,
     ) -> Result<Self, ApiError> {
+        if std::env::var("AI_PROVIDER")
+            .ok()
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("local"))
+        {
+            let base_url = std::env::var("OLLAMA_BASE_URL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "http://localhost:11434/v1".to_string());
+            let api_key = std::env::var("OPENAI_API_KEY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "ollama".to_string());
+            let client = OpenAiCompatClient::new(api_key, OpenAiCompatConfig::openai())
+                .with_base_url(base_url);
+            return Ok(Self::OpenAi(client));
+        }
+
         let resolved_model = providers::resolve_model_alias(model);
         match providers::detect_provider_kind(&resolved_model) {
             ProviderKind::Anthropic => Ok(Self::Anthropic(match anthropic_auth {
