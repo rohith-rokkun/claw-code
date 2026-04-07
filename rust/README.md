@@ -32,7 +32,7 @@ Set your API credentials:
 export GEMINI_API_KEY="..."
 # Optional: override the Gemini OpenAI-compatible base URL
 export GEMINI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai"
-# Optional: force provider selection (anthropic | gemini | openai | local | xai)
+# Optional: force provider selection (anthropic | gemini | openai | xai)
 export AI_PROVIDER="gemini"
 ```
 
