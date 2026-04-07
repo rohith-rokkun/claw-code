@@ -110,6 +110,67 @@ cargo test --workspace
 
 ---
 
+## 5) How to use `claw-code` for real coding work
+
+`claw` does **not** currently expose a `/code` slash command.
+Use normal prompt mode plus slash commands like `/model`, `/diff`, `/commit`, `/status`, `/help`.
+
+### Interactive coding loop
+
+```bash
+cd rust
+./target/debug/claw
+```
+
+Then in the REPL:
+
+```text
+/doctor
+/model gemini-3.1
+Review src/main.rs and propose a refactor plan for error handling.
+Now implement step 1 only and explain the diff.
+/diff
+/commit
+```
+
+### One-shot coding prompt (non-interactive)
+
+```bash
+cd rust
+./target/debug/claw --model gemini-3.1 prompt "Add unit tests for parse_config and explain the changes."
+```
+
+### Resume latest session
+
+```bash
+cd rust
+./target/debug/claw --resume latest
+```
+
+---
+
+## 6) Cross-check after pulling new source changes
+
+After `git pull` from `ultraworkers/claw-code`, run:
+
+```bash
+./install.sh --help
+cd rust
+cargo build --workspace
+cargo test -p api
+./target/debug/claw --help
+```
+
+Optional deep check:
+
+```bash
+cd rust
+cargo test --workspace
+```
+
+---
+
+## 7) Production-readiness checklist
 ## 5) Production-readiness checklist
 
 - Pin a stable model per environment via `MODEL_NAME`.
