@@ -177,3 +177,4 @@ cargo test --workspace
 - Use `AI_PROVIDER` explicitly in CI/CD and deployment scripts.
 - Run `/doctor` and smoke prompts during deploy health checks.
 - For local-only workflows, isolate with `AI_PROVIDER=local` + `OLLAMA_BASE_URL`.
+
