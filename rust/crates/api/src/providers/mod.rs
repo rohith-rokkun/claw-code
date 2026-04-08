@@ -43,6 +43,7 @@ fn provider_kind_from_env_override() -> Option<ProviderKind> {
         "openai" => Some(ProviderKind::OpenAi),
         "xai" => Some(ProviderKind::Xai),
         "gemini" => Some(ProviderKind::Gemini),
+        "local" => Some(ProviderKind::OpenAi),
         _ => None,
     }
 }
