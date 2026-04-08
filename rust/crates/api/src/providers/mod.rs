@@ -33,6 +33,19 @@ pub enum ProviderKind {
     Anthropic,
     Xai,
     OpenAi,
+    Gemini,
+}
+
+fn provider_kind_from_env_override() -> Option<ProviderKind> {
+    let override_value = std::env::var("AI_PROVIDER").ok()?;
+    match override_value.trim().to_ascii_lowercase().as_str() {
+        "anthropic" => Some(ProviderKind::Anthropic),
+        "openai" => Some(ProviderKind::OpenAi),
+        "xai" => Some(ProviderKind::Xai),
+        "gemini" => Some(ProviderKind::Gemini),
+        "local" => Some(ProviderKind::OpenAi),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +135,33 @@ const MODEL_REGISTRY: &[(&str, ProviderMetadata)] = &[
             default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
         },
     ),
+    (
+        "gemini",
+        ProviderMetadata {
+            provider: ProviderKind::Gemini,
+            auth_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_GEMINI_BASE_URL,
+        },
+    ),
+    (
+        "gemini-pro",
+        ProviderMetadata {
+            provider: ProviderKind::Gemini,
+            auth_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_GEMINI_BASE_URL,
+        },
+    ),
+    (
+        "gemini-flash",
+        ProviderMetadata {
+            provider: ProviderKind::Gemini,
+            auth_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_GEMINI_BASE_URL,
+        },
+    ),
 ];
 
 #[must_use]
@@ -145,6 +185,12 @@ pub fn resolve_model_alias(model: &str) -> String {
                     _ => trimmed,
                 },
                 ProviderKind::OpenAi => trimmed,
+                ProviderKind::Gemini => match *alias {
+                    "gemini" => "gemini-3",
+                    "gemini-pro" => "gemini-3.1",
+                    "gemini-flash" => "gemini-3",
+                    _ => trimmed,
+                },
             })
         })
         .map_or_else(|| trimmed.to_string(), ToOwned::to_owned)
@@ -169,11 +215,22 @@ pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
             default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
         });
     }
+    if canonical.starts_with("gemini") {
+        return Some(ProviderMetadata {
+            provider: ProviderKind::Gemini,
+            auth_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_GEMINI_BASE_URL,
+        });
+    }
     None
 }
 
 #[must_use]
 pub fn detect_provider_kind(model: &str) -> ProviderKind {
+    if let Some(provider) = provider_kind_from_env_override() {
+        return provider;
+    }
     if let Some(metadata) = metadata_for_model(model) {
         return metadata.provider;
     }
@@ -185,6 +242,9 @@ pub fn detect_provider_kind(model: &str) -> ProviderKind {
     }
     if openai_compat::has_api_key("XAI_API_KEY") {
         return ProviderKind::Xai;
+    }
+    if openai_compat::has_api_key("GEMINI_API_KEY") {
+        return ProviderKind::Gemini;
     }
     ProviderKind::Anthropic
 }
@@ -227,6 +287,10 @@ pub fn model_token_limit(model: &str) -> Option<ModelTokenLimit> {
         "grok-3" | "grok-3-mini" => Some(ModelTokenLimit {
             max_output_tokens: 64_000,
             context_window_tokens: 131_072,
+        }),
+        "gemini-3" | "gemini-3.1" => Some(ModelTokenLimit {
+            max_output_tokens: 64_000,
+            context_window_tokens: 1_048_576,
         }),
         _ => None,
     }
@@ -341,11 +405,15 @@ mod tests {
         assert_eq!(resolve_model_alias("grok"), "grok-3");
         assert_eq!(resolve_model_alias("grok-mini"), "grok-3-mini");
         assert_eq!(resolve_model_alias("grok-2"), "grok-2");
+        assert_eq!(resolve_model_alias("gemini"), "gemini-3");
+        assert_eq!(resolve_model_alias("gemini-pro"), "gemini-3.1");
+        assert_eq!(resolve_model_alias("gemini-flash"), "gemini-3");
     }
 
     #[test]
     fn detects_provider_from_model_name_first() {
         assert_eq!(detect_provider_kind("grok"), ProviderKind::Xai);
+        assert_eq!(detect_provider_kind("gemini-pro"), ProviderKind::Gemini);
         assert_eq!(
             detect_provider_kind("claude-sonnet-4-6"),
             ProviderKind::Anthropic
@@ -422,6 +490,27 @@ mod tests {
                 .context_window_tokens,
             131_072
         );
+        assert_eq!(
+            model_token_limit("gemini-3")
+                .expect("gemini-3 should be registered")
+                .context_window_tokens,
+            1_048_576
+        );
+    }
+
+    #[test]
+    fn detects_provider_from_ai_provider_env_override() {
+        let original = std::env::var_os("AI_PROVIDER");
+        std::env::set_var("AI_PROVIDER", "gemini");
+
+        let provider = detect_provider_kind("claude-sonnet-4-6");
+
+        match original {
+            Some(value) => std::env::set_var("AI_PROVIDER", value),
+            None => std::env::remove_var("AI_PROVIDER"),
+        }
+
+        assert_eq!(provider, ProviderKind::Gemini);
     }
 
     #[test]

@@ -18,6 +18,7 @@ use super::{preflight_message_request, Provider, ProviderFuture};
 
 pub const DEFAULT_XAI_BASE_URL: &str = "https://api.x.ai/v1";
 pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
+pub const DEFAULT_GEMINI_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/openai";
 const REQUEST_ID_HEADER: &str = "request-id";
 const ALT_REQUEST_ID_HEADER: &str = "x-request-id";
 const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
@@ -34,6 +35,7 @@ pub struct OpenAiCompatConfig {
 
 const XAI_ENV_VARS: &[&str] = &["XAI_API_KEY"];
 const OPENAI_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
+const GEMINI_ENV_VARS: &[&str] = &["GEMINI_API_KEY"];
 
 impl OpenAiCompatConfig {
     #[must_use]
@@ -55,11 +57,22 @@ impl OpenAiCompatConfig {
             default_base_url: DEFAULT_OPENAI_BASE_URL,
         }
     }
+
+    #[must_use]
+    pub const fn gemini() -> Self {
+        Self {
+            provider_name: "Gemini",
+            api_key_env: "GEMINI_API_KEY",
+            base_url_env: "GEMINI_BASE_URL",
+            default_base_url: DEFAULT_GEMINI_BASE_URL,
+        }
+    }
     #[must_use]
     pub fn credential_env_vars(self) -> &'static [&'static str] {
         match self.provider_name {
             "xAI" => XAI_ENV_VARS,
             "OpenAI" => OPENAI_ENV_VARS,
+            "Gemini" => GEMINI_ENV_VARS,
             _ => &[],
         }
     }
@@ -135,12 +148,7 @@ impl OpenAiCompatClient {
         let request_id = request_id_from_headers(response.headers());
         let body = response.text().await.map_err(ApiError::from)?;
         let payload = serde_json::from_str::<ChatCompletionResponse>(&body).map_err(|error| {
-            ApiError::json_deserialize(
-                self.config.provider_name,
-                &request.model,
-                &body,
-                error,
-            )
+            ApiError::json_deserialize(self.config.provider_name, &request.model, &body, error)
         })?;
         let mut normalized = normalize_response(&request.model, payload)?;
         if normalized.request_id.is_none() {
@@ -160,10 +168,7 @@ impl OpenAiCompatClient {
         Ok(MessageStream {
             request_id: request_id_from_headers(response.headers()),
             response,
-            parser: OpenAiSseParser::with_context(
-                self.config.provider_name,
-                request.model.clone(),
-            ),
+            parser: OpenAiSseParser::with_context(self.config.provider_name, request.model.clone()),
             pending: VecDeque::new(),
             done: false,
             state: StreamState::new(request.model.clone()),
@@ -253,7 +258,9 @@ fn jitter_for_base(base: Duration) -> Duration {
         .map(|elapsed| u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX))
         .unwrap_or(0);
     let tick = JITTER_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let mut mixed = raw_nanos.wrapping_add(tick).wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut mixed = raw_nanos
+        .wrapping_add(tick)
+        .wrapping_add(0x9E37_79B9_7F4A_7C15);
     mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     mixed ^= mixed >> 31;
