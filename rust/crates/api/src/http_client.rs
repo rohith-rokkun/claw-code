@@ -83,8 +83,13 @@ pub fn build_http_client_or_default() -> reqwest::Client {
 pub fn build_http_client_with(config: &ProxyConfig) -> Result<reqwest::Client, ApiError> {
     let mut builder = reqwest::Client::builder().no_proxy();
 
-    let no_proxy = config
-        .no_proxy
+    let no_proxy_value = match config.no_proxy.as_deref() {
+        Some(value) if !value.trim().is_empty() => {
+            Some(format!("{value},localhost,127.0.0.1"))
+        }
+        _ => Some("localhost,127.0.0.1".to_string()),
+    };
+    let no_proxy = no_proxy_value
         .as_deref()
         .and_then(reqwest::NoProxy::from_string);
 

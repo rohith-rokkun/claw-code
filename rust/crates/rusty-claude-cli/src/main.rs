@@ -341,7 +341,7 @@ impl CliOutputFormat {
 
 #[allow(clippy::too_many_lines)]
 fn parse_args(args: &[String]) -> Result<CliAction, String> {
-    let mut model = DEFAULT_MODEL.to_string();
+    let mut model = default_model_from_environment();
     let mut output_format = CliOutputFormat::Text;
     let mut permission_mode_override = None;
     let mut wants_help = false;
@@ -570,6 +570,48 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
             compact,
             base_commit,
         }),
+    }
+}
+
+fn default_model_from_environment() -> String {
+    if let Some(model_name) = env::var("MODEL_NAME")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return resolve_model_alias_with_config(&model_name);
+    }
+
+    match env::var("AI_PROVIDER")
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("gemini") => "gemini-pro".to_string(),
+        Some("openai") => "gpt-5".to_string(),
+        Some("local") => "llama3.2".to_string(),
+        Some("xai") => "grok".to_string(),
+        _ => {
+            if env::var("GEMINI_API_KEY")
+                .ok()
+                .is_some_and(|value| !value.trim().is_empty())
+            {
+                return "gemini-pro".to_string();
+            }
+            if env::var("OPENAI_API_KEY")
+                .ok()
+                .is_some_and(|value| !value.trim().is_empty())
+            {
+                return "gpt-5".to_string();
+            }
+            if env::var("XAI_API_KEY")
+                .ok()
+                .is_some_and(|value| !value.trim().is_empty())
+            {
+                return "grok".to_string();
+            }
+            DEFAULT_MODEL.to_string()
+        }
     }
 }
 
@@ -948,6 +990,26 @@ fn resolve_repl_model(cli_model: String) -> String {
     if cli_model != DEFAULT_MODEL {
         return cli_model;
     }
+    if let Some(env_model) = env::var("MODEL_NAME")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return resolve_model_alias_with_config(&env_model);
+    }
+    if let Some(provider_model) = match env::var("AI_PROVIDER")
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("gemini") => Some("gemini-pro".to_string()),
+        Some("openai") => Some("gpt-5".to_string()),
+        Some("local") => Some("llama3.2".to_string()),
+        Some("xai") => Some("grok".to_string()),
+        _ => None,
+    } {
+        return resolve_model_alias_with_config(&provider_model);
+    }
     if let Some(env_model) = env::var("ANTHROPIC_MODEL")
         .ok()
         .map(|value| value.trim().to_string())
@@ -966,6 +1028,7 @@ fn provider_label(kind: ProviderKind) -> &'static str {
         ProviderKind::Anthropic => "anthropic",
         ProviderKind::Xai => "xai",
         ProviderKind::OpenAi => "openai",
+        ProviderKind::Gemini => "gemini",
     }
 }
 
@@ -9380,6 +9443,63 @@ mod tests {
         std::env::remove_var("ANTHROPIC_MODEL");
         std::env::remove_var("CLAW_CONFIG_HOME");
         fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn resolve_repl_model_prefers_model_name_env_when_default() {
+        let _guard = env_lock();
+        let root = temp_dir();
+        fs::create_dir_all(&root).expect("root dir");
+        let config_home = root.join("config");
+        fs::create_dir_all(&config_home).expect("config home dir");
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
+        std::env::set_var("MODEL_NAME", "gemini-pro");
+        std::env::set_var("ANTHROPIC_MODEL", "sonnet");
+
+        let resolved = with_current_dir(&root, || resolve_repl_model(DEFAULT_MODEL.to_string()));
+
+        assert_eq!(resolved, "gemini-pro");
+
+        std::env::remove_var("MODEL_NAME");
+        std::env::remove_var("ANTHROPIC_MODEL");
+        std::env::remove_var("CLAW_CONFIG_HOME");
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn resolve_repl_model_uses_ai_provider_when_default_model_is_requested() {
+        let _guard = env_lock();
+        let root = temp_dir();
+        fs::create_dir_all(&root).expect("root dir");
+        let config_home = root.join("config");
+        fs::create_dir_all(&config_home).expect("config home dir");
+        std::env::set_var("CLAW_CONFIG_HOME", &config_home);
+        std::env::remove_var("MODEL_NAME");
+        std::env::set_var("AI_PROVIDER", "gemini");
+
+        let resolved = with_current_dir(&root, || resolve_repl_model(DEFAULT_MODEL.to_string()));
+
+        assert_eq!(resolved, "gemini-pro");
+
+        std::env::remove_var("AI_PROVIDER");
+        std::env::remove_var("CLAW_CONFIG_HOME");
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn default_model_from_environment_prefers_gemini_when_gemini_key_is_set() {
+        let _guard = env_lock();
+        std::env::remove_var("AI_PROVIDER");
+        std::env::remove_var("MODEL_NAME");
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::remove_var("XAI_API_KEY");
+        std::env::set_var("GEMINI_API_KEY", "gemini-test-key");
+
+        let model = super::default_model_from_environment();
+
+        assert_eq!(model, "gemini-pro");
+
+        std::env::remove_var("GEMINI_API_KEY");
     }
 
     #[test]

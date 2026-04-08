@@ -29,9 +29,11 @@ cargo run -p rusty-claude-cli -- --output-format json prompt "summarize src/main
 Set your API credentials:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-# Or use a proxy
-export ANTHROPIC_BASE_URL="https://your-proxy.com"
+export GEMINI_API_KEY="..."
+# Optional: override the Gemini OpenAI-compatible base URL
+export GEMINI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai"
+# Optional: force provider selection (anthropic | gemini | openai | local | xai)
+export AI_PROVIDER="gemini"
 ```
 
 Or authenticate via OAuth and let the CLI persist credentials locally:
