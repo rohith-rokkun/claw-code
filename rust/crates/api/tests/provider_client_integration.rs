@@ -93,6 +93,19 @@ fn read_gemini_base_url_prefers_env_override() {
     assert_eq!(read_gemini_base_url(), "https://example.gemini.test/openai");
 }
 
+#[test]
+fn provider_client_supports_local_provider_override_without_openai_key() {
+    let _lock = env_lock();
+    let _ai_provider = EnvVarGuard::set("AI_PROVIDER", Some("local"));
+    let _ollama_base_url = EnvVarGuard::set("OLLAMA_BASE_URL", Some("http://localhost:11434/v1"));
+    let _openai_api_key = EnvVarGuard::set("OPENAI_API_KEY", None);
+
+    let client =
+        ProviderClient::from_model("llama3.2").expect("local provider should not require OPENAI_API_KEY");
+
+    assert_eq!(client.provider_kind(), ProviderKind::OpenAi);
+}
+
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))

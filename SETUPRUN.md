@@ -171,7 +171,6 @@ cargo test --workspace
 ---
 
 ## 7) Production-readiness checklist
-## 5) Production-readiness checklist
 
 - Pin a stable model per environment via `MODEL_NAME`.
 - Keep provider credentials in secret managers (not committed files).
